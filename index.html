@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orbital Mechanics Sim</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#05070f;--panel:rgba(16,22,42,0.62);--line:rgba(110,140,220,0.18);--ink:#e7ecfb;--muted:#8893bc;--faint:#586187;
+    --orbit:#54d6ff;--ellipse:#ffb454;--hoh:#5be08a;--vel:#ff6fae;--earth:#3d7bd6;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 700px at 80% 0,rgba(84,214,255,0.08),transparent 60%)}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 22px 60px}
+  h1{font-weight:600;font-size:24px}h1 b{color:var(--orbit)}
+  header p{color:var(--muted);font-size:13px;margin:4px 0 18px}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  .stage{background:#03050c;border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative}
+  canvas{display:block;width:100%;cursor:crosshair}
+  .bar{display:flex;gap:8px;align-items:center;padding:11px 13px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .bar button{border:1px solid var(--line);background:#0c1226;color:var(--ink);cursor:pointer;border-radius:8px;padding:8px 13px;font-family:inherit;font-size:13px;font-weight:500;transition:all .15s}
+  .bar button:hover{border-color:var(--orbit)}
+  .bar button.pri{background:var(--orbit);color:#04141c;border-color:var(--orbit);font-weight:600}
+  .bar .sp{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:12px;color:var(--muted)}
+  input[type=range]{accent-color:var(--orbit)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;backdrop-filter:blur(10px)}
+  .panel h2{font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);margin-bottom:13px;font-weight:600}
+  .el{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:13px}
+  .el:last-child{border:none}.el .k{color:var(--muted)}.el .v{color:var(--ink);font-weight:500}
+  .el .v.type{color:var(--ellipse)}
+  .fld{font-size:12px;color:var(--muted);margin:10px 0 5px;display:block}
+  .ins{display:flex;gap:8px}
+  .ins input{flex:1;background:#0c1226;border:1px solid var(--line);border-radius:8px;padding:9px;color:var(--ink);font-family:'IBM Plex Mono';font-size:13px;outline:none}
+  .ins input:focus{border-color:var(--hoh)}
+  .dv{background:#0c1226;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;font-family:'IBM Plex Mono';font-size:12.5px;line-height:1.9}
+  .dv .k{color:var(--muted)}.dv .v{color:var(--hoh);font-weight:600;float:right}
+  .btn{width:100%;border:none;cursor:pointer;background:var(--hoh);color:#04140a;font-family:inherit;font-weight:600;font-size:14px;padding:11px;border-radius:9px;margin-top:12px}
+  .btn:hover{background:#48c879}
+  .hint{font-size:12px;color:var(--faint);line-height:1.5;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Orbital <b>Mechanics</b> Sim</h1>
+    <p>RK4-integrated two-body orbits. <b>Click anywhere</b> to place a satellite (given a circular velocity ×the speed factor). Watch the live Kepler ellipse and orbital elements; plan a Hohmann transfer on the right.</p>
+  </header>
+  <div class="layout">
+    <div class="stage">
+      <div class="bar">
+        <button id="playBtn" class="pri">⏸ Pause</button>
+        <button id="resetBtn">↺ Reset</button>
+        <button id="trailBtn">Clear trail</button>
+        <span class="sp">speed factor v/v<sub>circ</sub>: <b class="mono" id="sfV">1.00</b>
+          <input type="range" id="sf" min="0.3" max="1.42" step="0.01" value="1" style="width:110px">
+        </span>
+        <span class="sp" style="margin-left:0">sim speed <input type="range" id="simspd" min="0.2" max="4" step="0.1" value="1" style="width:90px"></span>
+      </div>
+      <canvas id="cv"></canvas>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>Orbital Elements</h2>
+        <div id="elements"></div>
+      </div>
+      <div class="panel">
+        <h2>Hohmann Transfer</h2>
+        <label class="fld">From radius r₁ &nbsp;/&nbsp; to radius r₂ (sim units)</label>
+        <div class="ins"><input id="r1" type="number" value="120"><input id="r2" type="number" value="240"></div>
+        <button class="btn" id="useCur" style="background:#2a3354;color:#cdd6f5;margin-top:8px">Use current orbit radius as r₁</button>
+        <div class="dv" id="dvOut"></div>
+        <button class="btn" id="applyHoh">▶ Put satellite on transfer (burn at r₁)</button>
+        <div class="hint">Δv values use μ = <span class="mono">5×10⁵</span> (sim units). The dashed <span style="color:var(--hoh)">green</span> ellipse is the transfer; the two circles are r₁ and r₂.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+  const MU=5e5;                       // gravitational parameter (sim units)
+  let W=0,H=0,DPR=devicePixelRatio||1,scale=1;
+  let sat={x:120,y:0,vx:0,vy:0}, trail=[], playing=true, simSpeed=1, sf=1;
+  let hoh=null;                       // {r1,r2,at,show}
+
+  function resize(){const w=cv.clientWidth;W=w;H=Math.round(w*0.72);cv.style.height=H+"px";
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);scale=1;draw();}
+  const cxp=()=>W/2, cyp=()=>H/2;
+  const SX=x=>cxp()+x*scale, SY=y=>cyp()-y*scale;
+
+  function circVel(x,y,factor){const r=Math.hypot(x,y);const v=Math.sqrt(MU/r)*factor;
+    // perpendicular (counter-clockwise)
+    return{vx:-v*y/r,vy:v*x/r};}
+  function placeSat(x,y){sat.x=x;sat.y=y;const v=circVel(x,y,sf);sat.vx=v.vx;sat.vy=v.vy;trail=[];}
+
+  function accel(x,y){const r=Math.hypot(x,y);const r3=r*r*r;return{ax:-MU*x/r3,ay:-MU*y/r3};}
+  function rk4(s,dt){
+    const a1=accel(s.x,s.y);
+    const k1={dx:s.vx,dy:s.vy,dvx:a1.ax,dvy:a1.ay};
+    const a2=accel(s.x+k1.dx*dt/2,s.y+k1.dy*dt/2);
+    const k2={dx:s.vx+k1.dvx*dt/2,dy:s.vy+k1.dvy*dt/2,dvx:a2.ax,dvy:a2.ay};
+    const a3=accel(s.x+k2.dx*dt/2,s.y+k2.dy*dt/2);
+    const k3={dx:s.vx+k2.dvx*dt/2,dy:s.vy+k2.dvy*dt/2,dvx:a3.ax,dvy:a3.ay};
+    const a4=accel(s.x+k3.dx*dt,s.y+k3.dy*dt);
+    const k4={dx:s.vx+k3.dvx*dt,dy:s.vy+k3.dvy*dt,dvx:a4.ax,dvy:a4.ay};
+    s.x+=dt/6*(k1.dx+2*k2.dx+2*k3.dx+k4.dx);
+    s.y+=dt/6*(k1.dy+2*k2.dy+2*k3.dy+k4.dy);
+    s.vx+=dt/6*(k1.dvx+2*k2.dvx+2*k3.dvx+k4.dvx);
+    s.vy+=dt/6*(k1.dvy+2*k2.dvy+2*k3.dvy+k4.dvy);
+  }
+
+  function elements(){
+    const r=Math.hypot(sat.x,sat.y),v=Math.hypot(sat.vx,sat.vy);
+    const eps=v*v/2-MU/r; const a=-MU/(2*eps);
+    const h=sat.x*sat.vy-sat.y*sat.vx;
+    const ex=((v*v-MU/r)*sat.x-(sat.x*sat.vx+sat.y*sat.vy)*sat.vx)/MU;
+    const ey=((v*v-MU/r)*sat.y-(sat.x*sat.vx+sat.y*sat.vy)*sat.vy)/MU;
+    const e=Math.hypot(ex,ey);const w=Math.atan2(ey,ex);
+    const T=a>0?2*Math.PI*Math.sqrt(a*a*a/MU):Infinity;
+    let type=e<0.001?"circular":e<1?"ellipse":Math.abs(e-1)<0.01?"parabola":"hyperbola";
+    return{r,v,a,e,w,T,peri:a*(1-e),apo:a>0?a*(1+e):Infinity,type,eps};
+  }
+
+  function drawEllipse(a,e,w,col,dash){
+    if(a<=0||e>=1)return;
+    ctx.save();ctx.strokeStyle=col;ctx.lineWidth=1.6;if(dash)ctx.setLineDash(dash);
+    ctx.beginPath();let first=true;
+    for(let th=0;th<=2*Math.PI+0.02;th+=0.03){const rr=a*(1-e*e)/(1+e*Math.cos(th));
+      const x=rr*Math.cos(th+w),y=rr*Math.sin(th+w);
+      first?(ctx.moveTo(SX(x),SY(y)),first=false):ctx.lineTo(SX(x),SY(y));}
+    ctx.stroke();ctx.restore();
+  }
+
+  function draw(){
+    ctx.fillStyle="#03050c";ctx.fillRect(0,0,W,H);
+    // stars
+    ctx.fillStyle="rgba(180,200,255,0.25)";
+    for(let i=0;i<70;i++){const sx=(i*97.3)%W,sy=(i*61.7)%H;ctx.fillRect(sx,sy,1,1);}
+    // hohmann overlay
+    if(hoh&&hoh.show){
+      ctx.strokeStyle="rgba(91,224,138,0.35)";ctx.lineWidth=1.2;ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.arc(cxp(),cyp(),hoh.r1*scale,0,7);ctx.stroke();
+      ctx.beginPath();ctx.arc(cxp(),cyp(),hoh.r2*scale,0,7);ctx.stroke();ctx.setLineDash([]);
+      const at=(hoh.r1+hoh.r2)/2,et=Math.abs(hoh.r2-hoh.r1)/(hoh.r1+hoh.r2);
+      drawEllipse(at,et,hoh.r1<hoh.r2?Math.PI:0,"#5be08a",[7,5]);
+    }
+    // live kepler ellipse
+    const el=elements();
+    drawEllipse(el.a,el.e,el.w,"rgba(255,180,84,0.7)",[6,5]);
+    // trail
+    ctx.strokeStyle="rgba(84,214,255,0.5)";ctx.lineWidth=1.6;ctx.beginPath();
+    trail.forEach((p,i)=>{i?ctx.lineTo(SX(p.x),SY(p.y)):ctx.moveTo(SX(p.x),SY(p.y));});ctx.stroke();
+    // central body
+    const g=ctx.createRadialGradient(cxp()-4,cyp()-4,2,cxp(),cyp(),16);
+    g.addColorStop(0,"#7db0f0");g.addColorStop(1,"#244e8c");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cxp(),cyp(),14,0,7);ctx.fill();
+    // satellite
+    ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(SX(sat.x),SY(sat.y),4.5,0,7);ctx.fill();
+    // velocity vector
+    const vsc=0.06;ctx.strokeStyle="#ff6fae";ctx.lineWidth=2;ctx.beginPath();
+    ctx.moveTo(SX(sat.x),SY(sat.y));ctx.lineTo(SX(sat.x+sat.vx*vsc),SY(sat.y+sat.vy*vsc));ctx.stroke();
+    renderElements(el);
+  }
+
+  function renderElements(el){
+    const f=(x,d)=>isFinite(x)?x.toFixed(d):"∞";
+    document.getElementById("elements").innerHTML=
+      `<div class="el"><span class="k">type</span><span class="v type">${el.type}</span></div>`+
+      `<div class="el"><span class="k">a (semi-major)</span><span class="v">${f(el.a,1)}</span></div>`+
+      `<div class="el"><span class="k">e (eccentricity)</span><span class="v">${f(el.e,3)}</span></div>`+
+      `<div class="el"><span class="k">periapsis</span><span class="v">${f(el.peri,1)}</span></div>`+
+      `<div class="el"><span class="k">apoapsis</span><span class="v">${f(el.apo,1)}</span></div>`+
+      `<div class="el"><span class="k">period T</span><span class="v">${f(el.T,1)}</span></div>`+
+      `<div class="el"><span class="k">radius r</span><span class="v">${f(el.r,1)}</span></div>`+
+      `<div class="el"><span class="k">speed v</span><span class="v">${f(el.v,2)}</span></div>`;
+  }
+
+  // hohmann calc
+  function calcHohmann(){
+    const r1=+document.getElementById("r1").value,r2=+document.getElementById("r2").value;
+    if(!(r1>0&&r2>0)){document.getElementById("dvOut").innerHTML="enter positive radii";return null;}
+    const at=(r1+r2)/2;
+    const v1=Math.sqrt(MU/r1),v2=Math.sqrt(MU/r2);
+    const vtp=Math.sqrt(MU*(2/r1-1/at)),vta=Math.sqrt(MU*(2/r2-1/at));
+    const dv1=vtp-v1,dv2=v2-vta;const tt=Math.PI*Math.sqrt(at*at*at/MU);
+    document.getElementById("dvOut").innerHTML=
+      `<div><span class="k">Δv₁ (burn at r₁)</span><span class="v">${dv1.toFixed(2)}</span></div>`+
+      `<div><span class="k">Δv₂ (burn at r₂)</span><span class="v">${dv2.toFixed(2)}</span></div>`+
+      `<div><span class="k">total Δv</span><span class="v">${(Math.abs(dv1)+Math.abs(dv2)).toFixed(2)}</span></div>`+
+      `<div><span class="k">transfer time</span><span class="v">${tt.toFixed(1)}</span></div>`;
+    hoh={r1,r2,show:true};draw();
+    return{r1,r2,dv1};
+  }
+  document.getElementById("r1").oninput=calcHohmann;
+  document.getElementById("r2").oninput=calcHohmann;
+  document.getElementById("useCur").onclick=()=>{document.getElementById("r1").value=Math.round(Math.hypot(sat.x,sat.y));calcHohmann();};
+  document.getElementById("applyHoh").onclick=()=>{
+    const h=calcHohmann();if(!h)return;
+    // place sat on circular r1 then add prograde dv1
+    placeSat(h.r1,0); // at +x, circular ccw -> vy positive
+    const r=Math.hypot(sat.x,sat.y);const ux=-sat.y/r,uy=sat.x/r; // prograde unit
+    const vmag=Math.hypot(sat.vx,sat.vy)+h.dv1;sat.vx=ux*vmag;sat.vy=uy*vmag;trail=[];
+  };
+
+  // controls
+  document.getElementById("playBtn").onclick=function(){playing=!playing;this.textContent=playing?"⏸ Pause":"▶ Play";this.classList.toggle("pri",playing);};
+  document.getElementById("resetBtn").onclick=()=>{placeSat(120,0);};
+  document.getElementById("trailBtn").onclick=()=>{trail=[];};
+  document.getElementById("sf").oninput=e=>{sf=+e.target.value;document.getElementById("sfV").textContent=sf.toFixed(2);};
+  document.getElementById("simspd").oninput=e=>{simSpeed=+e.target.value;};
+  cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect();
+    placeSat((e.clientX-r.left-cxp())/scale,-(e.clientY-r.top-cyp())/scale);});
+
+  // loop
+  function loop(){
+    if(playing){const steps=Math.round(6*simSpeed);const dt=0.06;
+      for(let i=0;i<steps;i++){rk4(sat,dt);}
+      trail.push({x:sat.x,y:sat.y});if(trail.length>1400)trail.shift();}
+    draw();requestAnimationFrame(loop);
+  }
+  addEventListener("resize",resize);
+  resize();placeSat(120,0);calcHohmann();loop();
+})();
+</script>
+</body>
+</html>
