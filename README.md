@@ -1,5 +1,7 @@
 # Orbital Mechanics Sim
 
+**▶ Try it online: [https://omri-n6gdp.github.io/orbital-mechanics-sim/](https://omri-n6gdp.github.io/orbital-mechanics-sim/)** (works on phones too)
+
 Orbital mechanics simulator with Hohmann transfer overlay.
 
 ## How to use
